@@ -1,7 +1,7 @@
 import sys
 import warnings
 
-from PyQt6.QtCore import pyqtSlot
+from PyQt6.QtCore import pyqtSlot, Qt
 from PyQt6.QtGui import QAction, QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMenuBar, QMenu, QFileDialog
 
@@ -12,6 +12,7 @@ class ViewAllShow(QMainWindow):
         self.args = sys.argv
         self.app = QApplication(self.args)
         super().__init__()
+        # self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         # 设置接受拖动应用
         self.setAcceptDrops(True)
         # 设置窗口标题
@@ -42,7 +43,12 @@ class ViewAllShow(QMainWindow):
     def dropEvent(self, event: QDropEvent):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
-                print(url)
+                if self.pre_drop_event(url.toString()):
+                    return
+                print(url.toString())
+
+    def pre_drop_event(self, url):
+        return False
 
     def set_title(self, title):
         self.title = title
