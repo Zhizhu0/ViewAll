@@ -1,19 +1,23 @@
 import sys
 import warnings
 
-from PyQt6.QtCore import pyqtSlot, Qt, QSize
+from PyQt6.QtCore import pyqtSlot, Qt, QSize, QPropertyAnimation, QEvent
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPainter, QBrush, QColor, \
-    QMouseEvent, QIcon
+    QMouseEvent, QIcon, QGuiApplication, QEnterEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QHBoxLayout, QLabel, QPushButton
+
+from ViewAllQSS import close_btn_normal, close_btn_maximize, important_btn
+
 
 def get_path(request):
     if getattr(sys, 'frozen', False):
         # 打包后的可执行文件
-        resources_path = sys._MEIPASS + "/" # type: ignore
+        resources_path = sys._MEIPASS + "/"  # type: ignore
     else:
         # 开发环境中
         resources_path = "./"
     return resources_path + request
+
 
 # 自定义标题栏
 class CustomTitleBar(QWidget):
@@ -53,78 +57,59 @@ class CustomTitleBar(QWidget):
         self.minimize_button = QPushButton(self)
         self.minimize_button.setIcon(QIcon(get_path('icons/minimize.png')))
         self.minimize_button.setIconSize(QSize(10, 10))
-        self.minimize_button.setStyleSheet("""
-                                            QPushButton {
-                                                color: #ffffff;
-                                                width: 50px;
-                                                height: 50px;
-                                                margin: 0px;
-                                                border: none;
-                                            }
-                                            QPushButton:hover {
-                                                background-color: rgb(55, 55, 55);
-                                            }
-                                        """)
-        # self.minimize_button.clicked.connect(self.parent.showMinimized)
+        self.minimize_button.setStyleSheet(important_btn)
+        self.minimize_button.clicked.connect(self.parent.showMinimized)  # type: ignore
         right_layout.addWidget(self.minimize_button)
 
         # 创建最大化/还原按钮
         self.maximize_button = QPushButton(self)
         self.maximize_button.setIcon(QIcon(get_path('icons/maximize.png')))
         self.maximize_button.setIconSize(QSize(10, 10))
-        self.maximize_button.setStyleSheet("""
-                                            QPushButton {
-                                                color: #ffffff;
-                                                width: 50px;
-                                                height: 50px;
-                                                margin: 0px;
-                                                border: none;
-                                            }
-                                            QPushButton:hover {
-                                                background-color: rgb(55, 55, 55);
-                                            }
-                                        """)
-        self.maximize_button.clicked.connect(self.toggle_maximize) # type: ignore
+        self.maximize_button.setStyleSheet(important_btn)
+        self.maximize_button.clicked.connect(self.toggle_maximize)  # type: ignore
         right_layout.addWidget(self.maximize_button)
 
         # 创建关闭按钮
         self.close_button = QPushButton(self)
         self.close_button.setIcon(QIcon(get_path('icons/close.png')))
         self.close_button.setIconSize(QSize(10, 10))
-        self.close_button.setStyleSheet("""
-                                            QPushButton {
-                                                color: #ffffff;
-                                                width: 50px;
-                                                height: 50px;
-                                                margin: 0px;
-                                                border-top-right-radius: 10px;
-                                            }
-                                            QPushButton:hover {
-                                                background-color: #ff0000;
-                                            }
-                                        """)
+        self.close_button.setStyleSheet(close_btn_normal)
         right_layout.addWidget(self.close_button)
-        self.close_button.clicked.connect(self.parent.close) # type: ignore
+        self.close_button.clicked.connect(self.parent.close)  # type: ignore
         left_layout.addWidget(QPushButton("A"), 0, Qt.AlignmentFlag.AlignCenter)
 
     def toggle_maximize(self):
         if self.parent.isMaximized():
             self.parent.showNormal()
+            self.close_button.setStyleSheet(close_btn_normal)
         else:
             self.parent.showMaximized()
+            self.close_button.setStyleSheet(close_btn_maximize)
         self.setFixedWidth(self.parent.width())
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.mouse_press_pos = event.globalPosition()
             self.mouse_press_d = event.pos()
-            event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        if event.buttons() == Qt.MouseButton.LeftButton:
+        if event.buttons() == Qt.MouseButton.LeftButton and self.mouse_press_pos and self.mouse_press_d:
             self.mouse_press_pos = event.globalPosition()
             self.parent.move(int(self.mouse_press_pos.x() - self.mouse_press_d.x()),
                              int(self.mouse_press_pos.y() - self.mouse_press_d.y()))
+            self.close_button.setStyleSheet(close_btn_normal)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.mouse_press_pos = None
+            self.mouse_press_d = None
+
+    def enterEvent(self, event: QEnterEvent):
+        self.parent.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.toggle_maximize()
             event.accept()
 
     def resizeEvent(self, event):
@@ -137,7 +122,10 @@ class CustomTitleBar(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(0, 0, 0)))
         painter.setOpacity(0.1)
-        painter.drawRoundedRect(self.rect(), 10, 10)
+        if self.parent.isMaximized():
+            painter.drawRect(self.rect())
+        else:
+            painter.drawRoundedRect(self.rect(), 10, 10)
 
 
 class ViewAllShow(QMainWindow):
@@ -148,9 +136,25 @@ class ViewAllShow(QMainWindow):
         super().__init__()
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        # self.setStyleSheet("border: 2px solid #000000;"
-        #                    "border-radius: 10px;")
+        self.animation = None
+        self.side = 10
+        self.min_width = 400
+        self.min_height = 300
+
+        self.cur_x = 0
+        self.cur_y = 0
+        self.pre_width = 0
+        self.pre_height = 0
+        self.left_drag = False
+        self.right_drag = False
+        self.bottom_drag = False
+        self.left_bottom_drag = False
+        self.right_bottom_drag = False
+        self.last_geometry = self.geometry()
+
         self.title_bar = CustomTitleBar(self)
+        self.setMouseTracking(True)
+        self.installEventFilter(self)
 
         # 设置接受拖动应用
         self.setAcceptDrops(True)
@@ -188,10 +192,116 @@ class ViewAllShow(QMainWindow):
     def pre_drop_event(self, url):
         return False
 
+    def eventFilter(self, obj, event):
+        if isinstance(event, QMouseEvent) and event.type() == QEvent.Type.MouseMove:
+            self.handle_mouse_move(event)
+        return super(ViewAllShow, self).eventFilter(obj, event)
+
+    def handle_mouse_move(self, event: QMouseEvent):
+        if self.isMaximized() or not event.buttons() == Qt.MouseButton.NoButton:
+            return
+        window_width = self.geometry().width()
+        window_height = self.geometry().height()
+        x = event.pos().x()
+        y = event.pos().y()
+        if x < self.side and y > window_height - self.side:
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        elif y > window_height - self.side and x > window_width - self.side:
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif x < self.side:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif y > window_height - self.side:
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        elif x > window_width - self.side:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.pos()
+            self.pre_width = self.geometry().width()
+            self.pre_height = self.geometry().height()
+            self.last_geometry = self.geometry()
+            self.cur_x = event.globalPosition().x()
+            self.cur_y = event.globalPosition().y()
+            x = pos.x()
+            y = pos.y()
+            if x < self.side and y > self.pre_height - self.side:
+                self.left_bottom_drag = True
+            elif y > self.pre_height - self.side and x > self.pre_width - self.side:
+                self.right_bottom_drag = True
+            elif x < self.side:
+                self.left_drag = True
+            elif y > self.pre_height - self.side:
+                self.bottom_drag = True
+            elif x > self.pre_width - self.side:
+                self.right_drag = True
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.left_drag = False
+            self.right_drag = False
+            self.bottom_drag = False
+            self.left_bottom_drag = False
+            self.right_bottom_drag = False
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if event.buttons() == Qt.MouseButton.LeftButton:
+            if self.left_drag:
+                self.setGeometry(min(int(self.last_geometry.x() + event.globalPosition().x() - self.cur_x),
+                                     self.last_geometry.x() + self.last_geometry.width() - self.min_width),
+                                 int(self.last_geometry.y()),
+                                 max(int(self.pre_width - event.globalPosition().x() + self.cur_x),
+                                     self.min_width),
+                                 int(self.pre_height))
+            if self.right_drag:
+                self.resize(max(int(event.globalPosition().x() - self.cur_x + self.pre_width), self.min_width), int(self.pre_height))
+            if self.bottom_drag:
+                self.resize(int(self.pre_width), max(int(event.globalPosition().y() - self.cur_y + self.pre_height), self.min_height))
+            if self.left_bottom_drag:
+                self.setGeometry(min(int(self.last_geometry.x() + event.globalPosition().x() - self.cur_x),
+                                     self.last_geometry.x() + self.last_geometry.width() - self.min_width),
+                                 int(self.last_geometry.y()),
+                                 max(int(self.pre_width - event.globalPosition().x() + self.cur_x),
+                                     self.min_width),
+                                 max(int(self.pre_height + event.globalPosition().y() - self.cur_y),
+                                     self.min_height))
+            if self.right_bottom_drag:
+                self.resize(max(int(event.globalPosition().x() - self.cur_x + self.pre_width), self.min_width),
+                            max(int(event.globalPosition().y() - self.cur_y + self.pre_height), self.min_height))
+            self.title_bar.setFixedWidth(self.geometry().width())
+
+
     def set_title(self, title):
         self.title = title
         self.setWindowTitle(self.base_title + ' - ' + self.title)
         self.title_bar.title_label.setText(self.base_title + ' - ' + self.title)
+
+    def resize_animation(self, start_rect, end_rect, finish_func=None):
+        if self.animation:
+            self.animation.stop()
+        self.animation = QPropertyAnimation(self, b"geometry")
+        self.animation.setDuration(100)
+        self.animation.setStartValue(start_rect)
+        self.animation.setEndValue(end_rect)
+        self.animation.valueChanged.connect(lambda x: self.title_bar.setFixedWidth(x.width()))  # type: ignore
+        self.animation.start()
+        if finish_func:
+            self.animation.finished.connect(finish_func) # type: ignore
+
+    def showMaximized(self):
+        screen = QGuiApplication.primaryScreen()
+        self.last_geometry = self.geometry()
+        if screen:
+            # 获取屏幕的可用几何形状
+            screen_rect = screen.availableGeometry()
+            self.resize_animation(self.geometry(), screen_rect, super().showMaximized)
+        else:
+            super().showMaximized()
+
+    def showNormal(self):
+        self.resize_animation(self.geometry(), self.last_geometry, super().showNormal)
 
     @pyqtSlot()
     def open_file(self):
@@ -207,7 +317,10 @@ class ViewAllShow(QMainWindow):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(34, 35, 33)))
-        painter.drawRoundedRect(self.rect(), 10, 10)
+        if self.isMaximized():
+            painter.drawRect(self.rect())
+        else:
+            painter.drawRoundedRect(self.rect(), 10, 10)
 
 
 if __name__ == '__main__':

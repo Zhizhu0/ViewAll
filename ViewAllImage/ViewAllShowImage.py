@@ -45,7 +45,11 @@ class ViewAllShowImage(ViewAllShow):
         return super().eventFilter(obj, event)
 
     def handle_mouse_wheel(self, event):
-        # 获取滚轮滚动的角度
+        # # 获取滚轮滚动的角度
+        # print(event.angleDelta().y())
+        # print(event.angleDelta().x())
+        # # 获取物理设备
+        # print(event.device().type())
         angle_delta = event.angleDelta()
         if angle_delta.y() > 0:
             # 滚轮向前滚动，放大图片
