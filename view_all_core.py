@@ -1,21 +1,36 @@
+import json
+import os.path
 import sys
 import warnings
 
 from PyQt6.QtCore import pyqtSlot, Qt, QSize, QPropertyAnimation, QEvent
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPainter, QBrush, QColor, \
     QMouseEvent, QIcon, QGuiApplication, QEnterEvent
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QHBoxLayout, QLabel, QPushButton
+from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QHBoxLayout, QLabel, QPushButton, \
+    QToolButton
 
-from ViewAllQSS import close_btn_normal, close_btn_maximize, important_btn
+from ViewAll.ViewAllQSS import close_btn_normal, close_btn_maximize, important_btn, view_tool_btn
 
+dev_path = './'
+base_path = './'
+if getattr(sys, 'frozen', False):
+    # 打包后的可执行文件
+    base_path = os.path.dirname(sys.executable)
+view_config_filename = 'view_config.json'
+view_config = {
+    'x': 0,
+    'y': 0,
+    'width': 500,
+    'height': 300,
+}
 
 def get_path(request):
     if getattr(sys, 'frozen', False):
         # 打包后的可执行文件
-        resources_path = sys._MEIPASS + "/"  # type: ignore
+        resources_path = sys._MEIPASS + "/"
     else:
         # 开发环境中
-        resources_path = "./"
+        resources_path = dev_path
     return resources_path + request
 
 
@@ -33,10 +48,10 @@ class CustomTitleBar(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self.main_layout)
 
-        left_layout = QHBoxLayout()
-        left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.addLayout(left_layout)
+        self.left_layout = QHBoxLayout()
+        self.left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.addLayout(self.left_layout)
 
         center_layout = QHBoxLayout()
         center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -58,7 +73,7 @@ class CustomTitleBar(QWidget):
         self.minimize_button.setIcon(QIcon(get_path('icons/minimize.png')))
         self.minimize_button.setIconSize(QSize(10, 10))
         self.minimize_button.setStyleSheet(important_btn)
-        self.minimize_button.clicked.connect(self.parent.showMinimized)  # type: ignore
+        self.minimize_button.clicked.connect(self.parent.showMinimized)
         right_layout.addWidget(self.minimize_button)
 
         # 创建最大化/还原按钮
@@ -66,7 +81,7 @@ class CustomTitleBar(QWidget):
         self.maximize_button.setIcon(QIcon(get_path('icons/maximize.png')))
         self.maximize_button.setIconSize(QSize(10, 10))
         self.maximize_button.setStyleSheet(important_btn)
-        self.maximize_button.clicked.connect(self.toggle_maximize)  # type: ignore
+        self.maximize_button.clicked.connect(self.toggle_maximize)
         right_layout.addWidget(self.maximize_button)
 
         # 创建关闭按钮
@@ -75,8 +90,7 @@ class CustomTitleBar(QWidget):
         self.close_button.setIconSize(QSize(10, 10))
         self.close_button.setStyleSheet(close_btn_normal)
         right_layout.addWidget(self.close_button)
-        self.close_button.clicked.connect(self.parent.close)  # type: ignore
-        left_layout.addWidget(QPushButton("A"), 0, Qt.AlignmentFlag.AlignCenter)
+        self.close_button.clicked.connect(self.parent.close)
 
     def toggle_maximize(self):
         if self.parent.isMaximized():
@@ -128,10 +142,30 @@ class CustomTitleBar(QWidget):
             painter.drawRoundedRect(self.rect(), 10, 10)
 
 
+# 按钮
+class ViewToolBtn(QPushButton):
+    def __init__(self, parent, icon=None, tooltip=''):
+        super().__init__(parent)
+        self.setStyleSheet(view_tool_btn)
+        self.setIconSize(QSize(20, 20))
+        if icon:
+            self.setIcon(QIcon(icon))
+        if tooltip:
+            self.setToolTip(tooltip)
+
+
 class ViewAllShow(QMainWindow):
     def __init__(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning, message="sipPyTypeDict.*")
         self.args = sys.argv
+        if os.path.exists(os.path.join(base_path, view_config_filename)):
+            with open(os.path.join(base_path, view_config_filename), 'r') as f:
+                try:
+                    json_data = json.load(f)
+                    global view_config
+                    view_config = json_data
+                except json.decoder.JSONDecodeError:
+                    pass
         self.app = QApplication(self.args)
         super().__init__()
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
@@ -152,6 +186,8 @@ class ViewAllShow(QMainWindow):
         self.right_bottom_drag = False
         self.last_geometry = self.geometry()
 
+        self.setGeometry(view_config['x'], view_config['y'], view_config['width'], view_config['height'])
+
         self.title_bar = CustomTitleBar(self)
         self.setMouseTracking(True)
         self.installEventFilter(self)
@@ -161,22 +197,30 @@ class ViewAllShow(QMainWindow):
         # 设置窗口标题
         self.base_title = "ViewAll"
         self.title = ''
-        # 创建菜单栏
-        # menubar = QMenuBar(self)
-        # self.setMenuBar(menubar)
 
-        # 创建文件菜单
-        # self.file_menu = QMenu("文件", self)
-        # menubar.addMenu(self.file_menu)
+        # 打开文件按钮
+        self.open_btn = ViewToolBtn(self, get_path('icons/open_file.png'), '打开')
+        self.title_bar.left_layout.addWidget(self.open_btn)
+        self.open_btn.clicked.connect(self.open_file)
 
-        # 添加打开菜单项
-        # self.open_action = QAction("打开", self)
-        # self.open_action.triggered.connect(self.open_file)
-        # self.file_menu.addAction(self.open_action)
+        # 设置按钮
+        self.setting_btn = ViewToolBtn(self, get_path('icons/setting.png'), '设置')
+        self.title_bar.left_layout.addWidget(self.setting_btn)
+        # self.setting_btn.clicked.connect(self.open_file)
 
     def run(self):
         self.show()
         self.app.exec()
+
+    def close(self):
+        geometry = self.geometry()
+        view_config['x'] = geometry.x()
+        view_config['y'] = geometry.y()
+        view_config['width'] = geometry.width()
+        view_config['height'] = geometry.height()
+        with open(os.path.join(base_path, view_config_filename), 'w') as f:
+            f.write(json.dumps(view_config))
+        super().close()
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -256,9 +300,11 @@ class ViewAllShow(QMainWindow):
                                      self.min_width),
                                  int(self.pre_height))
             if self.right_drag:
-                self.resize(max(int(event.globalPosition().x() - self.cur_x + self.pre_width), self.min_width), int(self.pre_height))
+                self.resize(max(int(event.globalPosition().x() - self.cur_x + self.pre_width), self.min_width),
+                            int(self.pre_height))
             if self.bottom_drag:
-                self.resize(int(self.pre_width), max(int(event.globalPosition().y() - self.cur_y + self.pre_height), self.min_height))
+                self.resize(int(self.pre_width),
+                            max(int(event.globalPosition().y() - self.cur_y + self.pre_height), self.min_height))
             if self.left_bottom_drag:
                 self.setGeometry(min(int(self.last_geometry.x() + event.globalPosition().x() - self.cur_x),
                                      self.last_geometry.x() + self.last_geometry.width() - self.min_width),
@@ -272,7 +318,6 @@ class ViewAllShow(QMainWindow):
                             max(int(event.globalPosition().y() - self.cur_y + self.pre_height), self.min_height))
             self.title_bar.setFixedWidth(self.geometry().width())
 
-
     def set_title(self, title):
         self.title = title
         self.setWindowTitle(self.base_title + ' - ' + self.title)
@@ -285,10 +330,10 @@ class ViewAllShow(QMainWindow):
         self.animation.setDuration(100)
         self.animation.setStartValue(start_rect)
         self.animation.setEndValue(end_rect)
-        self.animation.valueChanged.connect(lambda x: self.title_bar.setFixedWidth(x.width()))  # type: ignore
+        self.animation.valueChanged.connect(lambda x: self.title_bar.setFixedWidth(x.width()))
         self.animation.start()
         if finish_func:
-            self.animation.finished.connect(finish_func) # type: ignore
+            self.animation.finished.connect(finish_func)
 
     def showMaximized(self):
         screen = QGuiApplication.primaryScreen()
@@ -303,7 +348,6 @@ class ViewAllShow(QMainWindow):
     def showNormal(self):
         self.resize_animation(self.geometry(), self.last_geometry, super().showNormal)
 
-    @pyqtSlot()
     def open_file(self):
         file_dialog = QFileDialog(self)
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
@@ -321,7 +365,3 @@ class ViewAllShow(QMainWindow):
             painter.drawRect(self.rect())
         else:
             painter.drawRoundedRect(self.rect(), 10, 10)
-
-
-if __name__ == '__main__':
-    ViewAllShow().run()

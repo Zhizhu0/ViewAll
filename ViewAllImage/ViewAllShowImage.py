@@ -2,8 +2,10 @@ from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+import ViewAll
 from ViewAll.view_all_core import ViewAllShow
 
+ViewAll.view_all_core.dev_path = '../'
 
 class ViewAllShowImage(ViewAllShow):
     def __init__(self):
@@ -11,7 +13,6 @@ class ViewAllShowImage(ViewAllShow):
         self.img_url = ''
         self.scale = 1
         self.pixmap = None
-        self.resize(400, 300)
         self.set_title('image')
         # self.setStyleSheet('background-color: black;color: white;')
         # 创建一个 QLabel 组件来显示图片
@@ -39,9 +40,9 @@ class ViewAllShowImage(ViewAllShow):
             # self.image_label.setScaledContents(True)
 
     def eventFilter(self, obj, event):
-        if obj == self.image_label and event.type() == QEvent.Type.Wheel:
-            self.handle_mouse_wheel(event)
-            return True
+        # if obj == self.image_label and event.type() == QEvent.Type.Wheel:
+        #     self.handle_mouse_wheel(event)
+        #     return True
         return super().eventFilter(obj, event)
 
     def handle_mouse_wheel(self, event):
@@ -85,4 +86,7 @@ class ViewAllShowImage(ViewAllShow):
         return False
 
 if __name__ == '__main__':
-    ViewAllShowImage().run()
+    try:
+        ViewAllShowImage().run()
+    except Exception as e:
+        print(e)

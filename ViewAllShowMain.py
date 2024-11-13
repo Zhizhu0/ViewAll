@@ -1,11 +1,12 @@
-from view_all_core import ViewAllShow
+import json
+import os.path
+
+from ViewAll.view_all_core import ViewAllShow, base_path
 
 
 class ViewAllShowMain(ViewAllShow):
     def __init__(self):
         super().__init__()
-        # 设置大小
-        self.resize(1000, 300)
         self.set_title('main')
 
 
