@@ -1,4 +1,5 @@
 import json
+import logging
 import os.path
 from cProfile import label
 
@@ -20,22 +21,28 @@ class ViewAllShowMain(ViewContent):
         layout = QVBoxLayout(self)
         layout.addWidget(self.label)
 
+        self.parent.set_title('main')
+
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
+            logging.debug('文件拖入，显示拖入文件')
+
             self.set_background_color(255, 255, 255, 0.1)
             self.label.show()
             event.accept()
 
     def dropEvent(self, event: QDropEvent):
+        logging.debug('拖入文件，调用父窗口的函数')
+
         self.set_background_color(255, 255, 255, 0)
         self.label.hide()
         self.parent.dropEvent(event)
 
     def dragLeaveEvent(self, a0):
+        logging.debug('还原样式')
+
         self.set_background_color(255, 255, 255, 0)
         self.label.hide()
-
-
 
 
 if __name__ == '__main__':
@@ -43,7 +50,4 @@ if __name__ == '__main__':
     main = ViewAllShowMain(show)
     show.set_content(main)
 
-
     show.run()
-
-

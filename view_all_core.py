@@ -15,7 +15,10 @@ from ViewAll.ViewAllQSS import close_btn_normal, close_btn_maximize, important_b
 
 dev_path = './'
 base_path = './'
+
+is_dev = True
 if getattr(sys, 'frozen', False):
+    is_dev = False
     # 打包后的可执行文件
     base_path = os.path.dirname(sys.executable)
 view_config_filename = 'view_config.json'
@@ -26,7 +29,10 @@ view_config = {
     'height': 300,
 }
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+if is_dev:
+    logger.setLevel(logging.DEBUG)
+else:
+    logger.setLevel(logging.INFO)
 log_dir = os.path.join(base_path, 'log')
 log_format = '%(asctime)s - %(levelname)s - %(message)s'
 
@@ -35,7 +41,6 @@ if not os.path.exists(log_dir):
 file_handler = TimedRotatingFileHandler(os.path.join(log_dir, 'view_all.log'), when='D', interval=1, backupCount=10)
 file_handler.setFormatter(logging.Formatter(log_format))
 logger.addHandler(file_handler)
-
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, message="sipPyTypeDict.*")
 view_config_path = os.path.join(base_path, view_config_filename)
@@ -48,13 +53,13 @@ if os.path.exists(view_config_path):
         except json.decoder.JSONDecodeError:
             logging.warning('载入JSON数据失败，已使用默认设置')
 
+
+
 def get_path(request):
-    if getattr(sys, 'frozen', False):
-        # 打包后的可执行文件
-        resources_path = sys._MEIPASS + "/"
-    else:
-        # 开发环境中
+    if is_dev:
         resources_path = dev_path
+    else:
+        resources_path = sys._MEIPASS + "/"
     res = resources_path + request
     logging.debug(f'获取资源路径：{res}')
     return res
@@ -63,8 +68,9 @@ def get_path(request):
 # 自定义标题栏
 class ViewTitleBar(QWidget):
     def __init__(self, parent):
-        logging.debug('初始化ViewTitleBar开始')
         super().__init__(parent)
+        logging.debug('初始化ViewTitleBar')
+
         self.parent = parent
         self.setFixedHeight(50)
 
@@ -117,9 +123,10 @@ class ViewTitleBar(QWidget):
         right_layout.addWidget(self.close_button)
         self.close_button.clicked.connect(self.parent.close)
 
-        logging.debug('初始化ViewTitleBar结束')
 
     def toggle_maximize(self):
+        logging.debug('最大化与还原')
+
         if self.parent.isMaximized():
             self.parent.showNormal()
             self.close_button.setStyleSheet(close_btn_normal)
@@ -128,13 +135,15 @@ class ViewTitleBar(QWidget):
             self.close_button.setStyleSheet(close_btn_maximize)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
+        logging.debug('标题栏双击')
+
         if event.button() == Qt.MouseButton.LeftButton:
             self.toggle_maximize()
             event.accept()
 
-
     def paintEvent(self, event):
         logging.debug('绘制标题栏')
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -142,15 +151,14 @@ class ViewTitleBar(QWidget):
         painter.setOpacity(0.1)
         if self.parent.isMaximized():
             painter.drawRect(self.rect())
-            logging.debug('正在重绘标题栏: 全屏模式')
         else:
             painter.drawRoundedRect(self.rect(), 10, 10)
-            logging.debug('正在重绘标题栏: 窗口模式')
 
 
 # 按钮
 class ViewToolBtn(QPushButton):
     def __init__(self, parent, icon=None, tooltip=''):
+        logging.debug(f'初始化顶部导航按钮：icon: {icon}, tooltip: {tooltip}')
         super().__init__(parent)
         self.setStyleSheet(view_tool_btn)
         self.setIconSize(QSize(20, 20))
@@ -159,9 +167,12 @@ class ViewToolBtn(QPushButton):
         if tooltip:
             self.setToolTip(tooltip)
 
+
 # 主要内容
 class ViewContent(QWidget):
     def __init__(self, parent):
+        logging.debug('初始化主内容')
+
         super().__init__(parent)
         self.parent = parent
         self.margin = 20
@@ -171,6 +182,8 @@ class ViewContent(QWidget):
         self.a = 0
 
     def set_background_color(self, r, g, b, a=1):
+        logging.debug(f'主内容设置颜色: r{r}, g{g}, b{b}, a{a}')
+
         self.r = r
         self.g = g
         self.b = b
@@ -178,6 +191,8 @@ class ViewContent(QWidget):
         self.repaint()
 
     def paintEvent(self, event):
+        logging.debug('主内容绘制')
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -188,9 +203,11 @@ class ViewContent(QWidget):
         else:
             painter.drawRoundedRect(self.rect(), 10, 10)
 
+
 class ViewAllShow(QMainWindow):
     def __init__(self):
-        logging.debug('初始化ViewAllShow开始')
+        logging.debug('初始化ViewAllShow')
+
         self.app = QApplication([])
         super().__init__()
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
@@ -240,9 +257,6 @@ class ViewAllShow(QMainWindow):
         self.title_bar.left_layout.addWidget(self.setting_btn)
         # self.setting_btn.clicked.connect(self.open_file)
 
-        logging.debug('初始化ViewAllShow结束')
-
-
     def run(self):
         self.show()
         self.app.exec()
@@ -250,16 +264,20 @@ class ViewAllShow(QMainWindow):
 
     def close(self):
         logging.debug('执行主窗口close代码')
+
         geometry = self.geometry()
         view_config['x'] = geometry.x()
         view_config['y'] = geometry.y()
         view_config['width'] = geometry.width()
         view_config['height'] = geometry.height()
-        with open(os.path.join(base_path, view_config_filename), 'w') as write_file:
+        with open(view_config_path, 'w') as write_file:
+            logging.debug('写入配置文件')
             write_file.write(json.dumps(view_config))
         super().close()
 
     def set_content(self, content):
+        if self.content:
+            self.content.deleteLater()
         self.content = content
         self.after_paint()
 
@@ -273,13 +291,13 @@ class ViewAllShow(QMainWindow):
                 if self.pre_drop_event(url.toString()):
                     return
                 logging.info(f'拖入文件：{url.toString()}')
-                print(url.toString())
+                self.open(url.toString())
 
     def pre_drop_event(self, url):
         return False
 
     def eventFilter(self, obj, event):
-        if isinstance(event, QMouseEvent) and event.type() == QEvent.Type.MouseMove\
+        if isinstance(event, QMouseEvent) and event.type() == QEvent.Type.MouseMove \
                 or isinstance(event, QHoverEvent) and event.type() == QEvent.Type.HoverMove:
             self.handle_mouse_move(event)
         return super(ViewAllShow, self).eventFilter(obj, event)
@@ -390,7 +408,7 @@ class ViewAllShow(QMainWindow):
                 else:
                     self.mouse_press_pos = event.globalPosition()
                     self.move(int(self.mouse_press_pos.x() - self.mouse_press_d.x()),
-                                     int(self.mouse_press_pos.y() - self.mouse_press_d.y()))
+                              int(self.mouse_press_pos.y() - self.mouse_press_d.y()))
                 # self.showNormal(False)
 
     def set_title(self, title):
@@ -400,6 +418,7 @@ class ViewAllShow(QMainWindow):
 
     def resize_animation(self, start_rect, end_rect, finish_func=None):
         logging.debug('执行窗口变化动画')
+
         if self.animation:
             self.animation.stop()
         self.animation = QPropertyAnimation(self, b"geometry")
@@ -429,15 +448,30 @@ class ViewAllShow(QMainWindow):
             self.setGeometry(self.last_geometry)
 
     def open_file(self):
+        logging.debug('打开文件选择器')
+
         file_dialog = QFileDialog(self)
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         if file_dialog.exec():
             selected_files = file_dialog.selectedFiles()
             for file in selected_files:
                 logging.info(f'打开的文件：{file}')
-                print(f"打开的文件：{file}")
+                self.open(file)
+
+    def open(self, url):
+        logging.debug(f'打开url: {url}')
+
+        if url.startswith('file:///'):
+            url = url[8:]
+        if url.endswith('.jpg') or url.endswith('.png') or url.endswith('.jpeg') or url.endswith('.webp'):
+            from ViewAll.ViewAllImage.ViewAllShowImage import ViewAllShowImage
+            self.set_content(ViewAllShowImage(self, url))
+        else:
+            logging.info(f'无效的url: {url}')
 
     def after_paint(self):
+        logging.debug('主窗口调用子控件重绘')
+
         self.title_bar.setFixedWidth(self.geometry().width())
         self.title_bar.setFixedHeight(self.title_bar_height)
 
@@ -446,10 +480,9 @@ class ViewAllShow(QMainWindow):
             self.content.setFixedHeight(self.geometry().height() - self.title_bar_height - 2 * self.content.margin)
             self.content.move(self.content.margin, self.title_bar_height + self.content.margin)
 
-
-
     def paintEvent(self, event):
         logging.debug('主窗口绘制')
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
