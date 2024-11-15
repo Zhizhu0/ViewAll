@@ -33,12 +33,17 @@ if is_dev:
     logger.setLevel(logging.DEBUG)
 else:
     logger.setLevel(logging.INFO)
-log_dir = os.path.join(base_path, 'log')
+log_dir = os.path.join(base_path, 'logs')
 log_format = '%(asctime)s - %(levelname)s - %(message)s'
 
 if not os.path.exists(log_dir):
     os.mkdir(log_dir)
-file_handler = TimedRotatingFileHandler(os.path.join(log_dir, 'view_all.log'), when='D', interval=1, backupCount=10)
+file_handler = TimedRotatingFileHandler(os.path.join(log_dir, 'view_all.log'),
+                                        when='D',
+                                        interval=1,
+                                        backupCount=10,
+                                        utc=True)
+file_handler.atTime = (3, 0, 0)
 file_handler.setFormatter(logging.Formatter(log_format))
 logger.addHandler(file_handler)
 
@@ -52,7 +57,6 @@ if os.path.exists(view_config_path):
             logging.info('载入JSON数据成功')
         except json.decoder.JSONDecodeError:
             logging.warning('载入JSON数据失败，已使用默认设置')
-
 
 
 def get_path(request):
@@ -123,7 +127,6 @@ class ViewTitleBar(QWidget):
         right_layout.addWidget(self.close_button)
         self.close_button.clicked.connect(self.parent.close)
 
-
     def toggle_maximize(self):
         logging.debug('最大化与还原')
 
@@ -189,6 +192,9 @@ class ViewContent(QWidget):
         self.b = b
         self.a = a
         self.repaint()
+
+    def pre_drop_event(self, url):
+        return False
 
     def paintEvent(self, event):
         logging.debug('主内容绘制')
@@ -263,9 +269,9 @@ class ViewAllShow(QMainWindow):
         logging.debug('程序执行结束')
 
     def close(self):
-        logging.debug('执行主窗口close代码')
+        logging.debug(f'执行主窗口close代码, last_geometry: {self.last_geometry}, geometry: {self.geometry()}')
 
-        geometry = self.geometry()
+        geometry = self.last_geometry if self.isMaximized() else self.geometry()
         view_config['x'] = geometry.x()
         view_config['y'] = geometry.y()
         view_config['width'] = geometry.width()
@@ -288,13 +294,11 @@ class ViewAllShow(QMainWindow):
     def dropEvent(self, event: QDropEvent):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
-                if self.pre_drop_event(url.toString()):
+                if self.content and self.content.pre_drop_event(url.toString()):
                     return
                 logging.info(f'拖入文件：{url.toString()}')
                 self.open(url.toString())
 
-    def pre_drop_event(self, url):
-        return False
 
     def eventFilter(self, obj, event):
         if isinstance(event, QMouseEvent) and event.type() == QEvent.Type.MouseMove \
@@ -431,6 +435,7 @@ class ViewAllShow(QMainWindow):
 
     def showMaximized(self):
         logging.debug('最大化窗口')
+
         screen = QGuiApplication.primaryScreen()
         self.last_geometry = self.geometry()
         if screen:
@@ -442,6 +447,7 @@ class ViewAllShow(QMainWindow):
 
     def showNormal(self, need_animation=True):
         logging.debug('还原窗口')
+
         if need_animation:
             self.resize_animation(self.geometry(), self.last_geometry, super().showNormal)
         else:
@@ -467,7 +473,7 @@ class ViewAllShow(QMainWindow):
             from ViewAll.ViewAllImage.ViewAllShowImage import ViewAllShowImage
             self.set_content(ViewAllShowImage(self, url))
         else:
-            logging.info(f'无效的url: {url}')
+            logging.warning(f'无法加载: {url}， 未知的后缀')
 
     def after_paint(self):
         logging.debug('主窗口调用子控件重绘')
@@ -481,7 +487,7 @@ class ViewAllShow(QMainWindow):
             self.content.move(self.content.margin, self.title_bar_height + self.content.margin)
 
     def paintEvent(self, event):
-        logging.debug('主窗口绘制')
+        logging.debug(f'主窗口绘制, rect:{self.rect()}')
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
