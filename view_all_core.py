@@ -4,12 +4,13 @@ import sys
 import warnings
 import logging
 from logging.handlers import TimedRotatingFileHandler
+import traceback
 
 from PyQt6.QtCore import pyqtSlot, Qt, QSize, QPropertyAnimation, QEvent, QRect, QPoint
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPainter, QBrush, QColor, \
     QMouseEvent, QIcon, QGuiApplication, QEnterEvent, QHoverEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QHBoxLayout, QLabel, QPushButton, \
-    QToolButton
+    QToolButton, QVBoxLayout
 
 from ViewAll.ViewAllQSS import close_btn_normal, close_btn_maximize, important_btn, view_tool_btn
 
@@ -48,6 +49,17 @@ file_handler.setFormatter(logging.Formatter(log_format))
 logger.addHandler(file_handler)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, message="sipPyTypeDict.*")
+
+def custom_excepthook(e_type, e_value, t):
+    logging.error(f'异常{e_type}被抛出')
+    logging.error(f'异常消息: {e_value}')
+    exc_tb = traceback.extract_tb(t)
+    for line in traceback.format_list(exc_tb):
+        logging.error(line.strip())
+
+sys.excepthook = custom_excepthook
+
+
 view_config_path = os.path.join(base_path, view_config_filename)
 if os.path.exists(view_config_path):
     with open(view_config_path, 'r') as f:
@@ -184,6 +196,9 @@ class ViewContent(QWidget):
         self.b = 255
         self.a = 0
 
+        self.bottom_left_widgets = []
+        self.bottom_right_widgets = []
+
     def set_background_color(self, r, g, b, a=1):
         logging.debug(f'主内容设置颜色: r{r}, g{g}, b{b}, a{a}')
 
@@ -195,6 +210,19 @@ class ViewContent(QWidget):
 
     def pre_drop_event(self, url):
         return False
+
+    def pre_close(self):
+        logging.debug('主内容被关闭')
+        return False
+
+    def init_bottom_bar(self):
+        logging.debug('初始化底部信息栏控件')
+
+        for widget in self.bottom_left_widgets:
+            self.parent.bottom_bar.add_left_widget(widget)
+
+        for widget in self.bottom_right_widgets:
+            self.parent.bottom_bar.add_right_widget(widget)
 
     def paintEvent(self, event):
         logging.debug('主内容绘制')
@@ -208,6 +236,52 @@ class ViewContent(QWidget):
             painter.drawRect(self.rect())
         else:
             painter.drawRoundedRect(self.rect(), 10, 10)
+
+class ViewAllShowBottom(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.layout = QVBoxLayout(self)
+        self.left_layout = QHBoxLayout()
+        self.right_layout = QHBoxLayout()
+        self.right_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.layout.addLayout(self.left_layout)
+        self.layout.addLayout(self.right_layout)
+        self.left_widgets = []
+        self.right_widgets = []
+
+    def paintEvent(self, event):
+        logging.debug('底部信息栏绘制')
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(55, 55, 55)))
+        painter.setOpacity(0.1)
+        if self.parent.isMaximized():
+            painter.drawRect(self.rect())
+        else:
+            painter.drawRoundedRect(self.rect(), 10, 10)
+
+    def add_left_widget(self, widget):
+        logging.debug(f'底部信息栏添加left_widget: {widget}')
+        self.left_layout.addWidget(widget)
+        self.left_widgets.append(widget)
+
+    def add_right_widget(self, widget):
+        logging.debug(f'底部信息栏添加right_widget: {widget}')
+        self.right_layout.addWidget(widget)
+        self.right_widgets.append(widget)
+
+    def pre_close(self):
+        logging.debug('底部信息栏销毁元素')
+
+        for widget in self.left_widgets:
+            widget.deleteLater()
+        for widget in self.right_widgets:
+            widget.deleteLater()
+        self.left_widgets.clear()
+        self.right_widgets.clear()
 
 
 class ViewAllShow(QMainWindow):
@@ -224,6 +298,7 @@ class ViewAllShow(QMainWindow):
         self.min_height = 300
 
         self.title_bar_height = 50
+        self.bottom_bar_height = 50
         self.mouse_press_pos = None
         self.mouse_press_d = None
 
@@ -243,6 +318,8 @@ class ViewAllShow(QMainWindow):
         self.setGeometry(view_config['x'], view_config['y'], view_config['width'], view_config['height'])
 
         self.title_bar = ViewTitleBar(self)
+        self.bottom_bar = ViewAllShowBottom(self)
+
         self.setMouseTracking(True)
         self.installEventFilter(self)
         self.content = None
@@ -271,6 +348,9 @@ class ViewAllShow(QMainWindow):
     def close(self):
         logging.debug(f'执行主窗口close代码, last_geometry: {self.last_geometry}, geometry: {self.geometry()}')
 
+        if self.content and self.content.pre_close():
+            return
+        self.bottom_bar.pre_close()
         geometry = self.last_geometry if self.isMaximized() else self.geometry()
         view_config['x'] = geometry.x()
         view_config['y'] = geometry.y()
@@ -283,8 +363,12 @@ class ViewAllShow(QMainWindow):
 
     def set_content(self, content):
         if self.content:
+            if self.content.pre_close():
+                return
+            self.bottom_bar.pre_close()
             self.content.deleteLater()
         self.content = content
+        self.content.init_bottom_bar()
         self.after_paint()
 
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -481,9 +565,13 @@ class ViewAllShow(QMainWindow):
         self.title_bar.setFixedWidth(self.geometry().width())
         self.title_bar.setFixedHeight(self.title_bar_height)
 
+        self.bottom_bar.setFixedWidth(self.geometry().width())
+        self.bottom_bar.setFixedHeight(self.bottom_bar_height)
+        self.bottom_bar.move(0, self.geometry().height() - self.bottom_bar_height)
+
         if self.content:
             self.content.setFixedWidth(self.geometry().width() - 2 * self.content.margin)
-            self.content.setFixedHeight(self.geometry().height() - self.title_bar_height - 2 * self.content.margin)
+            self.content.setFixedHeight(self.geometry().height() - self.bottom_bar_height - self.title_bar_height - 2 * self.content.margin)
             self.content.move(self.content.margin, self.title_bar_height + self.content.margin)
 
     def paintEvent(self, event):

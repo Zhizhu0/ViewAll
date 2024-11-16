@@ -22,6 +22,7 @@ class ViewAllShowMain(ViewContent):
         layout.addWidget(self.label)
 
         self.parent.set_title('main')
+        self.parent.bottom_bar_height = 0
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():

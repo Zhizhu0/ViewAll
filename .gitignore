@@ -1,4 +1,6 @@
 cs.py
 view_config.json
-./logs/
 ./logs/*
+.git/
+__pycache__/
+/logs/
