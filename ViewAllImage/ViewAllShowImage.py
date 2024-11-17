@@ -17,6 +17,7 @@ class ViewAllShowImage(ViewContent):
         self.show()
         self.img_label = QLabel(self)
         self.img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.img_label)
 

@@ -5,6 +5,7 @@ import warnings
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import traceback
+import importlib
 
 from PyQt6.QtCore import pyqtSlot, Qt, QSize, QPropertyAnimation, QEvent, QRect, QPoint
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPainter, QBrush, QColor, \
@@ -28,6 +29,13 @@ view_config = {
     'y': 0,
     'width': 500,
     'height': 300,
+    'open': {
+        'jpg': base_path + 'ViewAllImage/ViewAllShowImage',
+        'png': base_path + 'ViewAllImage/ViewAllShowImage',
+        'jpeg': base_path + 'ViewAllImage/ViewAllShowImage',
+        'webp': base_path + 'ViewAllImage/ViewAllShowImage',
+        'txt': base_path + 'ViewAllText/ViewAllShowText',
+    }
 }
 logger = logging.getLogger()
 if is_dev:
@@ -65,7 +73,22 @@ if os.path.exists(view_config_path):
     with open(view_config_path, 'r') as f:
         try:
             json_data = json.load(f)
-            view_config = json_data
+
+            # data_dict = [json_data]
+            # while data_dict:
+            #     data = data_dict.pop(0)
+            # view_config = json_data
+
+            stack = [(view_config, json_data)]
+            result = view_config.copy()
+            while stack:
+                d1, d2 = stack.pop()
+                for key, value in d2.items():
+                    if key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
+                        stack.append((d1[key], value))
+                    else:
+                        result[key] = value
+            view_config = result
             logging.info('载入JSON数据成功')
         except json.decoder.JSONDecodeError:
             logging.warning('载入JSON数据失败，已使用默认设置')
@@ -553,9 +576,23 @@ class ViewAllShow(QMainWindow):
 
         if url.startswith('file:///'):
             url = url[8:]
-        if url.endswith('.jpg') or url.endswith('.png') or url.endswith('.jpeg') or url.endswith('.webp'):
-            from ViewAll.ViewAllImage.ViewAllShowImage import ViewAllShowImage
-            self.set_content(ViewAllShowImage(self, url))
+
+        end = url.split('.')[-1]
+        logging.debug(end)
+        if end in view_config['open']:
+            base_import_path = view_config['open'][end]
+            json_import_path = base_import_path + '.json'
+            py_import_path = base_import_path + '.py'
+
+            data = json.load(open(json_import_path))
+            view_content = data['view_content']
+
+            spec = importlib.util.spec_from_file_location(view_content, py_import_path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[view_content] = module
+            spec.loader.load_module()
+            import_content = getattr(module, view_content)
+            self.set_content(import_content(self, url))
         else:
             logging.warning(f'无法加载: {url}， 未知的后缀')
 
