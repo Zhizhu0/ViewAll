@@ -4,3 +4,4 @@ view_config.json
 .git/
 __pycache__/
 /logs/
+/site-packages/

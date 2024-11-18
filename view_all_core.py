@@ -6,6 +6,9 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import traceback
 import importlib
+import ensurepip
+import subprocess
+from modulefinder import packagePathMap
 
 from PyQt6.QtCore import pyqtSlot, Qt, QSize, QPropertyAnimation, QEvent, QRect, QPoint
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QPainter, QBrush, QColor, \
@@ -30,11 +33,11 @@ view_config = {
     'width': 500,
     'height': 300,
     'open': {
-        'jpg': base_path + 'ViewAllImage/ViewAllShowImage',
-        'png': base_path + 'ViewAllImage/ViewAllShowImage',
-        'jpeg': base_path + 'ViewAllImage/ViewAllShowImage',
-        'webp': base_path + 'ViewAllImage/ViewAllShowImage',
-        'txt': base_path + 'ViewAllText/ViewAllShowText',
+        'jpg': os.path.join(base_path, 'ViewAllImage', 'ViewAllShowImage'),
+        'png': os.path.join(base_path, 'ViewAllImage', 'ViewAllShowImage'),
+        'jpeg': os.path.join(base_path, 'ViewAllImage', 'ViewAllShowImage'),
+        'webp': os.path.join(base_path, 'ViewAllImage', 'ViewAllShowImage'),
+        'txt': os.path.join(base_path, 'ViewAllText', 'ViewAllShowText'),
     }
 }
 logger = logging.getLogger()
@@ -55,6 +58,10 @@ file_handler = TimedRotatingFileHandler(os.path.join(log_dir, 'view_all.log'),
 file_handler.atTime = (3, 0, 0)
 file_handler.setFormatter(logging.Formatter(log_format))
 logger.addHandler(file_handler)
+
+package_directory = os.path.join(base_path, "site-packages")
+os.makedirs(package_directory, exist_ok=True)
+sys.path.append(package_directory)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, message="sipPyTypeDict.*")
 
@@ -102,6 +109,17 @@ def get_path(request):
     res = resources_path + request
     logging.debug(f'获取资源路径：{res}')
     return res
+
+def pip_download(name, version):
+    logging.info(f'开始下载{name}=={version}')
+
+    res = subprocess.run(['pip', 'install', f'{name}={version}', f'--target={package_directory}'], capture_output=True,
+                         text=True)
+    if res.returncode == 0:
+        logging.info(f"{name}已成功安装。")
+    else:
+        logging.warning(f"安装 {name}时出现错误：{res.stderr}")
+    logging.info(res.stdout)
 
 
 # 自定义标题栏
@@ -584,15 +602,22 @@ class ViewAllShow(QMainWindow):
             json_import_path = base_import_path + '.json'
             py_import_path = base_import_path + '.py'
 
-            data = json.load(open(json_import_path))
-            view_content = data['view_content']
+            try:
+                data = json.load(open(json_import_path))
+                imports = data['import']
+                for im in imports:
+                    if importlib.util.find_spec(im['name']) is None:
+                        pip_download(im['name'], im['version'])
+                view_content = data['view_content']
 
-            spec = importlib.util.spec_from_file_location(view_content, py_import_path)
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[view_content] = module
-            spec.loader.load_module()
-            import_content = getattr(module, view_content)
-            self.set_content(import_content(self, url))
+                spec = importlib.util.spec_from_file_location(view_content, py_import_path)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[view_content] = module
+                spec.loader.load_module()
+                import_content = getattr(module, view_content)
+                self.set_content(import_content(self, url))
+            except FileNotFoundError:
+                logging.warning(f'无法加载: {json_import_path}, 文件不存在')
         else:
             logging.warning(f'无法加载: {url}， 未知的后缀')
 

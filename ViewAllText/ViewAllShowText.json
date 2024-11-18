@@ -1,5 +1,10 @@
 {
-  "import": [],
+  "import": [
+    {
+      "name": "chardet",
+      "version": "5.2.0"
+    }
+  ],
   "view_content": "ViewAllShowText",
   "could_read": ["txt"]
 }
