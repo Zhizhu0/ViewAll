@@ -54,7 +54,7 @@ file_handler = TimedRotatingFileHandler(os.path.join(log_dir, 'view_all.log'),
                                         when='D',
                                         interval=1,
                                         backupCount=10,
-                                        utc=True)
+                                        utc=False)
 file_handler.atTime = (3, 0, 0)
 file_handler.setFormatter(logging.Formatter(log_format))
 logger.addHandler(file_handler)
@@ -240,6 +240,19 @@ class ViewContent(QWidget):
         self.bottom_left_widgets = []
         self.bottom_right_widgets = []
 
+        self.title_left_widgets = []
+
+
+        # 打开文件按钮
+        self.open_btn = ViewToolBtn(self, get_path('icons/open_file.png'), '打开')
+        self.title_left_widgets.append(self.open_btn)
+        self.open_btn.clicked.connect(self.parent.open_file)
+
+        # 设置按钮
+        self.setting_btn = ViewToolBtn(self, get_path('icons/setting.png'), '设置')
+        self.title_left_widgets.append(self.setting_btn)
+        # self.setting_btn.clicked.connect(self.open_file)
+
     def set_background_color(self, r, g, b, a=1):
         logging.debug(f'主内容设置颜色: r{r}, g{g}, b{b}, a{a}')
 
@@ -254,16 +267,28 @@ class ViewContent(QWidget):
 
     def pre_close(self):
         logging.debug('主内容被关闭')
+
+        for widget in self.title_left_widgets:
+            widget.deleteLater()
+        for widget in self.bottom_left_widgets:
+            widget.deleteLater()
+        for widget in self.bottom_right_widgets:
+            widget.deleteLater()
+
         return False
 
-    def init_bottom_bar(self):
-        logging.debug('初始化底部信息栏控件')
+    def init_bar(self):
+        logging.debug('初始化加载标题工具栏和底部信息栏')
+
+        for widget in self.title_left_widgets:
+            self.parent.title_bar.left_layout.addWidget(widget)
 
         for widget in self.bottom_left_widgets:
-            self.parent.bottom_bar.add_left_widget(widget)
+            self.parent.bottom_bar.left_layout.addWidget(widget)
 
         for widget in self.bottom_right_widgets:
-            self.parent.bottom_bar.add_right_widget(widget)
+            self.parent.bottom_bar.right_layout.addWidget(widget)
+
 
     def paintEvent(self, event):
         logging.debug('主内容绘制')
@@ -282,14 +307,15 @@ class ViewAllShowBottom(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
-        self.layout = QVBoxLayout(self)
+        self.layout = QHBoxLayout(self)
         self.left_layout = QHBoxLayout()
+        self.left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
         self.right_layout = QHBoxLayout()
         self.right_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
         self.layout.addLayout(self.left_layout)
         self.layout.addLayout(self.right_layout)
-        self.left_widgets = []
-        self.right_widgets = []
 
     def paintEvent(self, event):
         logging.debug('底部信息栏绘制')
@@ -303,26 +329,6 @@ class ViewAllShowBottom(QWidget):
             painter.drawRect(self.rect())
         else:
             painter.drawRoundedRect(self.rect(), 10, 10)
-
-    def add_left_widget(self, widget):
-        logging.debug(f'底部信息栏添加left_widget: {widget}')
-        self.left_layout.addWidget(widget)
-        self.left_widgets.append(widget)
-
-    def add_right_widget(self, widget):
-        logging.debug(f'底部信息栏添加right_widget: {widget}')
-        self.right_layout.addWidget(widget)
-        self.right_widgets.append(widget)
-
-    def pre_close(self):
-        logging.debug('底部信息栏销毁元素')
-
-        for widget in self.left_widgets:
-            widget.deleteLater()
-        for widget in self.right_widgets:
-            widget.deleteLater()
-        self.left_widgets.clear()
-        self.right_widgets.clear()
 
 
 class ViewAllShow(QMainWindow):
@@ -371,15 +377,6 @@ class ViewAllShow(QMainWindow):
         self.base_title = "ViewAll"
         self.title = ''
 
-        # 打开文件按钮
-        self.open_btn = ViewToolBtn(self, get_path('icons/open_file.png'), '打开')
-        self.title_bar.left_layout.addWidget(self.open_btn)
-        self.open_btn.clicked.connect(self.open_file)
-
-        # 设置按钮
-        self.setting_btn = ViewToolBtn(self, get_path('icons/setting.png'), '设置')
-        self.title_bar.left_layout.addWidget(self.setting_btn)
-        # self.setting_btn.clicked.connect(self.open_file)
 
     def run(self):
         self.show()
@@ -391,7 +388,6 @@ class ViewAllShow(QMainWindow):
 
         if self.content and self.content.pre_close():
             return
-        self.bottom_bar.pre_close()
         geometry = self.last_geometry if self.isMaximized() else self.geometry()
         view_config['x'] = geometry.x()
         view_config['y'] = geometry.y()
@@ -399,6 +395,7 @@ class ViewAllShow(QMainWindow):
         view_config['height'] = geometry.height()
         with open(view_config_path, 'w') as write_file:
             logging.debug('写入配置文件')
+
             write_file.write(json.dumps(view_config))
         super().close()
 
@@ -406,10 +403,9 @@ class ViewAllShow(QMainWindow):
         if self.content:
             if self.content.pre_close():
                 return
-            self.bottom_bar.pre_close()
             self.content.deleteLater()
         self.content = content
-        self.content.init_bottom_bar()
+        self.content.init_bar()
         self.after_paint()
 
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -423,7 +419,6 @@ class ViewAllShow(QMainWindow):
                     return
                 logging.info(f'拖入文件：{url.toString()}')
                 self.open(url.toString())
-
 
     def eventFilter(self, obj, event):
         if isinstance(event, QMouseEvent) and event.type() == QEvent.Type.MouseMove \

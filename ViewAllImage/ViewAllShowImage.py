@@ -172,7 +172,4 @@ class ViewAllShowImage(ViewContent):
                 return True
         return False
 
-    def pre_close(self):
-        return False
-
 
