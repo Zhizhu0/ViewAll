@@ -26,6 +26,9 @@ if getattr(sys, 'frozen', False):
     is_dev = False
     # 打包后的可执行文件
     base_path = os.path.dirname(sys.executable)
+
+sys.path.append(base_path)
+
 view_config_filename = 'view_config.json'
 view_config = {
     'x': 0,
@@ -38,6 +41,7 @@ view_config = {
         'jpeg': os.path.join(base_path, 'ViewAllImage', 'ViewAllShowImage'),
         'webp': os.path.join(base_path, 'ViewAllImage', 'ViewAllShowImage'),
         'txt': os.path.join(base_path, 'ViewAllText', 'ViewAllShowText'),
+        'py': os.path.join(base_path, 'ViewAllText', 'ViewAllCodes', 'ViewAllShowPython'),
     }
 }
 logger = logging.getLogger()

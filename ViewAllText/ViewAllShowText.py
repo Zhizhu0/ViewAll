@@ -258,13 +258,15 @@ class ViewAllShowText(ViewContent):
             self.text_edit.setText(self.text)
             self.encoding_label.setCurrentText(self.encoding)
             self.have_changed = False
+            self.characters_count_label.setText(str(len(self.text)))
 
     def text_change(self):
-        logging.debug('text_changed')
+        if self.text != self.text_edit.toPlainText():
+            logging.debug('text_changed')
 
-        self.text = self.text_edit.toPlainText()
-        self.characters_count_label.setText(str(len(self.text)))
-        self.have_changed = True
+            self.text = self.text_edit.toPlainText()
+            self.characters_count_label.setText(str(len(self.text)))
+            self.have_changed = True
 
     def cursor_position_changed(self):
         cursor = self.text_edit.textCursor()

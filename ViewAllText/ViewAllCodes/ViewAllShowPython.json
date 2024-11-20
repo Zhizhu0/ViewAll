@@ -1,0 +1,10 @@
+{
+  "import": [
+    {
+      "name": "chardet",
+      "version": "5.2.0"
+    }
+  ],
+  "view_content": "ViewAllShowPython",
+  "could_read": ["py"]
+}
